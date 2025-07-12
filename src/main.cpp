@@ -5,9 +5,20 @@
 #include "ww_bluetooth.h"
 #include "HIDKeyboardTypes.h"
 #include "bike_keys.h"
+#include "SSD1306Wire.h"
+
+#define LED_PIN_1 35
+#define LED_PIN_2 36
+#define LED_PIN_3 37
 
 #define LIN_RX_PIN 16
 #define LIN_TX_PIN 17
+#define LIN_SLEEP 18
+
+#define SWITCH_PIN_1 41
+#define SWITCH_PIN_2 42
+
+#define LIN_COMMANDER_PIN 8
 
 SoftwareLin swLin(LIN_RX_PIN, LIN_TX_PIN);
 
@@ -36,6 +47,7 @@ SoftwareLin swLin(LIN_RX_PIN, LIN_TX_PIN);
 
 std::mutex dataMutex;
 std::map<int, __BIKE_KEY *> bike_key_map;
+SSD1306Wire display(0x3c, 7, 15, GEOMETRY_128_32); // I2C address 0x3c for the OLED display
 
 int send_count = 0;
 int wheel_value = 0;
@@ -141,6 +153,27 @@ void button_interrupt()
     send_key_oneshot(WW_KEY_ESC);
 }
 
+void drawString(int x, int y, String str, OLEDDISPLAY_COLOR color = WHITE)
+{
+    display.setColor(color);
+    display.drawString(x, y, str);
+}
+
+void switch_test_thread(void *args)
+{
+    while (1)
+    {
+        digitalWrite(SWITCH_PIN_1, LOW);
+        vTaskDelay(1000);
+        digitalWrite(SWITCH_PIN_1, HIGH);
+        vTaskDelay(2000);
+        digitalWrite(SWITCH_PIN_2, LOW);
+        vTaskDelay(1000);
+        digitalWrite(SWITCH_PIN_2, HIGH);
+        vTaskDelay(2000);
+    }
+}
+
 void setup()
 {
 
@@ -149,6 +182,29 @@ void setup()
     Serial.begin(115200);
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), button_interrupt, FALLING);
+
+    pinMode(LED_PIN_1, OUTPUT);
+    pinMode(LED_PIN_2, OUTPUT);
+    pinMode(LED_PIN_3, OUTPUT);
+
+    digitalWrite(LED_PIN_1, LOW);
+    digitalWrite(LED_PIN_2, LOW);
+    digitalWrite(LED_PIN_3, LOW);
+
+    pinMode(LIN_COMMANDER_PIN, OUTPUT);
+    digitalWrite(LIN_COMMANDER_PIN, HIGH);
+
+    pinMode(LIN_SLEEP, OUTPUT);
+    digitalWrite(LIN_SLEEP, HIGH);
+
+    display.init();
+    display.clear();
+
+    display.setColor(WHITE);
+    display.setFont(ArialMT_Plain_10);
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    drawString(0, 0, "BMW Motorrad", WHITE);
+    display.display();
 
 #ifndef ON_BIKE
     pinMode(BUTTON_TEST_WHEEL_UP, INPUT_PULLUP);
@@ -183,6 +239,19 @@ void setup()
         1,
         NULL);
 #endif
+
+    pinMode(SWITCH_PIN_1, OUTPUT);
+    pinMode(SWITCH_PIN_2, OUTPUT);
+    digitalWrite(SWITCH_PIN_1, HIGH);
+    digitalWrite(SWITCH_PIN_2, HIGH);
+
+    // xTaskCreate(
+    //     switch_test_thread,
+    //     "switch_test_thread",
+    //     1024,
+    //     NULL,
+    //     1,
+    //     NULL);
 }
 
 void print_buffer(const uint8_t *buf, int size)
@@ -231,6 +300,8 @@ void loop()
 
 #else
 
+bool is_comm_led_on = true;
+
 void loop()
 {
     while (1)
@@ -258,7 +329,21 @@ void loop()
             }
             swLin.endFrame();
 
+            if (is_comm_led_on)
+            {
+                digitalWrite(LED_PIN_1, HIGH);
+            }
+            else
+            {
+                digitalWrite(LED_PIN_1, LOW);
+            }
+            is_comm_led_on = !is_comm_led_on;
+
             print_buffer(buf, bytes_read);
+
+            // display.clear();
+            // display.drawString(0, 0, StringFormat("%02x %02x %02x %02x %02x %02x %02x", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6]));
+            // display.display();
 
             if (bytes_read < bytes_to_read)
             {
