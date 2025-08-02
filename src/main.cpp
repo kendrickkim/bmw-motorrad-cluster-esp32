@@ -421,16 +421,16 @@ void loop()
             else if (id == 0x20) // 0x20
             {
                 carStatus.setIgnition(buf[2] == 0x7F ? 1 : 0);          // 0x7F means ignition is ON
-                unsigned short speed = ((buf[4] & 0x0F) << 8) | buf[3]; // Speed is in bytes 3 and 4
-                double d_speed = (double)speed * 0.16;
-                d_speed = d_speed + 0.5;         // Round to nearest integer
-                speed = (unsigned short)d_speed; // Convert back to unsigned short
+                unsigned short rear_wheel_rpm = ((buf[4] & 0x0F) << 8) | buf[3]; // Speed is in bytes 3 and 4
+                double d_wheel_rpm = (double)rear_wheel_rpm * 0.16;
+                d_wheel_rpm = d_wheel_rpm + 0.5;         // Round to nearest integer
+                unsigned short wheel_rpm = (unsigned short)d_wheel_rpm; // Convert back to unsigned short
 
                 if (buf[2] == 0x3F)
                 {
-                    speed = 0; // If speed is 0x3F, treat it as 0 (error case)
+                    wheel_rpm = 0; // If speed is 0x3F, treat it as 0 (error case)
                 }
-                carStatus.setSpeed(speed); // Set the speed in km/h
+                carStatus.setWheelRPM(wheel_rpm); // Set the speed in km/h
             }
             // else if (id == 0x2b)
             // {

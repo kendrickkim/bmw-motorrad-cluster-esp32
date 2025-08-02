@@ -13,7 +13,8 @@ class __CAR_STATUS
     unsigned char wheel_value = 99; // Value representing the steering wheel position
     unsigned char gear;             // Current gear position 0 : N, 1 : 1, 2 : 2, 3 : 3, 4 : 4, 5 : 5, 6 : 6, 9 : F
     unsigned char voltage;          // Battery voltage in millivolts * 100
-    unsigned short speed;           // Speed in km/h
+    // unsigned short speed;           // Speed in km/h
+    unsigned short wheel_rpm;       // Wheel RPM
     unsigned short rpm;             // Engine RPM
     unsigned char ignition;         // Ignition state (0: off, 1: on)
 
@@ -39,7 +40,8 @@ public:
     uint8_t setWheelValue(unsigned char value);
     void setGear(unsigned char gear) { this->gear = gear; }
     void setVoltage(unsigned char voltage) { this->voltage = voltage; }
-    void setSpeed(unsigned short speed) { this->speed = speed; }
+    // void setSpeed(unsigned short speed) { this->speed = speed; }
+    void setWheelRPM(unsigned short rpm) { this->wheel_rpm = rpm; }
     void setRpm(unsigned short rpm) { this->rpm = rpm; }
     void setIgnition(unsigned char ignition) { this->ignition = ignition; }
 
