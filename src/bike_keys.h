@@ -17,6 +17,7 @@ enum BIKE_KEY_STATUS
 {
     BK_STATUS_RELEASED,
     BK_STATUS_PRESSED,
+    BK_STATUS_LONG_KEY_RELEASED,
     BK_STATUS_MAX
 };
 
@@ -55,7 +56,7 @@ public:
 
     void press()
     {
-        if (this->status == BK_STATUS_PRESSED)
+        if (this->status == BK_STATUS_PRESSED || this->status == BK_STATUS_LONG_KEY_RELEASED)
             return;
         this->ms_press = millis();
         this->status = BK_STATUS_PRESSED;
@@ -68,7 +69,7 @@ public:
             if (millis() - this->ms_press > BK_LONG_KEY_PRESS_TIME)
             {
                 this->ms_release = millis();
-                this->status = BK_STATUS_RELEASED;
+                this->status = BK_STATUS_LONG_KEY_RELEASED;
                 return true;
             }
         }
