@@ -37,7 +37,7 @@
     "arduino",
     "espidf"
   ],
-  "name": "SKYTRACKER (8 MB QD, 2M PSRAM)",
+  "name": "BMW-WWC (8 MB QD, 2M PSRAM)",
   "upload": {
     "flash_size": "8MB",
     "maximum_ram_size": 327680,

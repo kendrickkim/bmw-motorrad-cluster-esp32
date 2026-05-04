@@ -11,7 +11,7 @@ __CAR_STATUS::__CAR_STATUS()
     gear = 0;
     voltage = 0;
     wheel_rpm = 0;
-    rpm = 0;
+    engine_rpm = 0;
     ignition = 0;
 
     // Initialize car_data and old_car_data to zero
@@ -45,7 +45,7 @@ void __CAR_STATUS::buildData()
     if(ignition == 0)
     {
         wheel_rpm = 0;
-        rpm = 0;
+        engine_rpm = 0;
     }
     car_data[0] = buttons & 0xFF;        // Low byte of buttons
     car_data[1] = (buttons >> 8) & 0xFF; // High byte of buttons
@@ -54,8 +54,8 @@ void __CAR_STATUS::buildData()
     car_data[4] = voltage;               // Voltage
     car_data[5] = wheel_rpm & 0xFF;      // Low byte of wheel RPM
     car_data[6] = (wheel_rpm >> 8) & 0xFF; // High byte of wheel RPM
-    car_data[7] = rpm & 0xFF;            // Low byte of RPM
-    car_data[8] = (rpm >> 8) & 0xFF;     // High byte of RPM
+    car_data[7] = engine_rpm & 0xFF;            // Low byte of RPM
+    car_data[8] = (engine_rpm >> 8) & 0xFF;     // High byte of RPM
     car_data[9] = ignition;              // Ignition state
 
     // Fill the rest with zeros or any other data as needed
@@ -85,7 +85,7 @@ void __CAR_STATUS::printData()
                      gear,
                      voltage / 100.0,
                      wheel_rpm,
-                     rpm,
+                     engine_rpm,
                      button_to_string(ignition).c_str());
 
     printf("%s\n", str_data.c_str());

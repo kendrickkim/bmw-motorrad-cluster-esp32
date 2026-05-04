@@ -15,8 +15,12 @@ class __CAR_STATUS
     unsigned char voltage;          // Battery voltage in millivolts * 100
     // unsigned short speed;           // Speed in km/h
     unsigned short wheel_rpm;       // Wheel RPM
-    unsigned short rpm;             // Engine RPM
+    unsigned short engine_rpm;             // Engine RPM
     unsigned char ignition;         // Ignition state (0: off, 1: on)
+
+    uint32_t distance_total;       // Total distance traveled in meters
+    uint32_t distance_trip1;      // Distance traveled in trip 1 in meters
+    uint32_t distance_trip2;      // Distance traveled in trip 2 in meters
 
     unsigned char car_data[CAR_DATA_LENGTH];
 
@@ -42,7 +46,7 @@ public:
     void setVoltage(unsigned char voltage) { this->voltage = voltage; }
     // void setSpeed(unsigned short speed) { this->speed = speed; }
     void setWheelRPM(unsigned short rpm) { this->wheel_rpm = rpm; }
-    void setRpm(unsigned short rpm) { this->rpm = rpm; }
+    void setEngineRPM(unsigned short rpm) { this->engine_rpm = rpm; }
     void setIgnition(unsigned char ignition) { this->ignition = ignition; }
 
     bool needToUpdate();
