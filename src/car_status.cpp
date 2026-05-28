@@ -47,19 +47,27 @@ void __CAR_STATUS::buildData()
         wheel_rpm = 0;
         engine_rpm = 0;
     }
-    car_data[0] = buttons & 0xFF;        // Low byte of buttons
-    car_data[1] = (buttons >> 8) & 0xFF; // High byte of buttons
-    car_data[2] = wheel_value;           // Wheel value
-    car_data[3] = gear;                  // Gear
-    car_data[4] = voltage;               // Voltage
-    car_data[5] = wheel_rpm & 0xFF;      // Low byte of wheel RPM
-    car_data[6] = (wheel_rpm >> 8) & 0xFF; // High byte of wheel RPM
-    car_data[7] = engine_rpm & 0xFF;            // Low byte of RPM
-    car_data[8] = (engine_rpm >> 8) & 0xFF;     // High byte of RPM
-    car_data[9] = ignition;              // Ignition state
+    car_data[0] = 'V';
+    car_data[1] = '1';
+    car_data[2] = buttons & 0xFF;        // Low byte of buttons
+    car_data[3] = (buttons >> 8) & 0xFF; // High byte of buttons
+    car_data[4] = wheel_value;           // Wheel value
+    car_data[5] = gear;                  // Gear
+    car_data[6] = voltage;               // Voltage
+    car_data[7] = wheel_rpm & 0xFF;      // Low byte of wheel RPM
+    car_data[8] = (wheel_rpm >> 8) & 0xFF; // High byte of wheel RPM
+    car_data[9] = engine_rpm & 0xFF;            // Low byte of RPM
+    car_data[10] = (engine_rpm >> 8) & 0xFF;     // High byte of RPM
+    car_data[11] = ignition;              // Ignition state
+
+    // for (int i = 0; i < CAR_DATA_LENGTH; i++)
+    // {
+    //     printf("%02x ", car_data[i]);
+    // }
+    // printf("\n");
 
     // Fill the rest with zeros or any other data as needed
-    memset(car_data + 11, 0, sizeof(car_data) - 11);
+    memset(car_data + 12, 0, sizeof(car_data) - 12);
 }
 
 void __CAR_STATUS::printData()

@@ -36,17 +36,17 @@ SoftwareLin swLin(LIN_RX_PIN, LIN_TX_PIN);
 #define SW_LEFT_PIN 0
 #define SW_RIGHT_PIN 39
 
-#ifndef ON_BIKE
-#define BUTTON_TEST_WHEEL_UP 41
-#define BUTTON_TEST_WHEEL_DOWN 42
-#define BUTTON_TEST_WHEEL_LEFT 48
-#define BUTTON_TEST_WHEEL_RIGHT 2
-#else
+// #ifndef ON_BIKE
+// #define BUTTON_TEST_WHEEL_UP 41
+// #define BUTTON_TEST_WHEEL_DOWN 42
+// #define BUTTON_TEST_WHEEL_LEFT 48
+// #define BUTTON_TEST_WHEEL_RIGHT 2
+// #else
 #define BUTTON_TEST_WHEEL_UP NOT_DEFINED_KEY
 #define BUTTON_TEST_WHEEL_DOWN NOT_DEFINED_KEY
 #define BUTTON_TEST_WHEEL_LEFT NOT_DEFINED_KEY
 #define BUTTON_TEST_WHEEL_RIGHT NOT_DEFINED_KEY
-#endif
+// #endif
 
 #define BUTTON_TEST_WHEEL_LEFT_LIN (NOT_DEFINED_KEY + 1)
 #define BUTTON_TEST_WHEEL_RIGHT_LIN (NOT_DEFINED_KEY + 2)
@@ -74,21 +74,27 @@ void sendCarStatusData(void *args)
 #ifndef ON_BIKE
     unsigned short speed = send_count++;
     speed = speed % 300;
-    carStatus.setSpeed(speed);                 // Set the speed in the car status
-    carStatus.setRpm(send_count * 10 % 14000); // Set the RPM in the car status
-    // carStatus.setWheelValue(send_count % 256); // Simulate wheel value change for demonstration
+    // carStatus.setSpeed(speed);                 // Set the speed in the car status
+    carStatus.setEngineRPM(send_count * 10 % 14000); // Set the RPM in the car status
+    carStatus.setWheelRPM(send_count % 256); // Simulate wheel value change for demonstration
     carStatus.setGear((send_count / 50) % 7);
-
+    carStatus.setIgnition(1);
+    carStatus.setVoltage(120);
     carStatus.setAllButtonRelease();
 
-    if (digitalRead(BUTTON_TEST_WHEEL_LEFT) == LOW)
+    // carStatus.printData();
+
+    if (BUTTON_TEST_WHEEL_LEFT != NOT_DEFINED_KEY && digitalRead(BUTTON_TEST_WHEEL_LEFT) == LOW)
     {
         carStatus.setButtons(carStatus.BUTTON_WHEEL_LEFT);
     }
-    if (digitalRead(BUTTON_TEST_WHEEL_RIGHT) == LOW)
+    if (BUTTON_TEST_WHEEL_RIGHT != NOT_DEFINED_KEY && digitalRead(BUTTON_TEST_WHEEL_RIGHT) == LOW)
     {
         carStatus.setButtons(carStatus.BUTTON_WHEEL_RIGHT);
     }
+
+    vTaskDelay(100);
+    // carStatus.printData();
 #endif
 
     if (carStatus.needToUpdate()) // Check if car status needs to be updated
@@ -256,10 +262,22 @@ void setup()
     display.display();
 
 #ifndef ON_BIKE
-    pinMode(BUTTON_TEST_WHEEL_UP, INPUT_PULLUP);
-    pinMode(BUTTON_TEST_WHEEL_DOWN, INPUT_PULLUP);
-    pinMode(BUTTON_TEST_WHEEL_LEFT, INPUT_PULLUP);
-    pinMode(BUTTON_TEST_WHEEL_RIGHT, INPUT_PULLUP);
+    if (BUTTON_TEST_WHEEL_UP != NOT_DEFINED_KEY)
+    {
+        pinMode(BUTTON_TEST_WHEEL_UP, INPUT_PULLUP);
+    }
+    if (BUTTON_TEST_WHEEL_DOWN != NOT_DEFINED_KEY)
+    {
+        pinMode(BUTTON_TEST_WHEEL_DOWN, INPUT_PULLUP);
+    }
+    if (BUTTON_TEST_WHEEL_LEFT != NOT_DEFINED_KEY)
+    {
+        pinMode(BUTTON_TEST_WHEEL_LEFT, INPUT_PULLUP);
+    }
+    if (BUTTON_TEST_WHEEL_RIGHT != NOT_DEFINED_KEY)
+    {
+        pinMode(BUTTON_TEST_WHEEL_RIGHT, INPUT_PULLUP);
+    }
 #endif
     wwBluetooth.On();
 

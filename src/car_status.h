@@ -1,7 +1,7 @@
 #pragma once
 #include <mutex>
 
-#define CAR_DATA_LENGTH 15
+#define CAR_DATA_LENGTH 20
 
 class __CAR_STATUS
 {
