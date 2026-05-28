@@ -118,7 +118,7 @@ uint8_t __CAR_STATUS::setWheelValue(uint8_t value) // 2 : nothing, 0 : up : 1 do
             ret = 1;
         }
     }
-    else
+    else if(wheel_value < value)
     {
         ret = 1;
         if (value - wheel_value > 200)
@@ -126,6 +126,8 @@ uint8_t __CAR_STATUS::setWheelValue(uint8_t value) // 2 : nothing, 0 : up : 1 do
             ret = 0;
         }
     }
+
+    // printf("wheel_value : %d, value : %d\n", wheel_value, value);
 
     wheel_value = value;
     return ret;

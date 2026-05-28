@@ -36,17 +36,17 @@ SoftwareLin swLin(LIN_RX_PIN, LIN_TX_PIN);
 #define SW_LEFT_PIN 0
 #define SW_RIGHT_PIN 39
 
-// #ifndef ON_BIKE
+#ifndef ON_BIKE
 // #define BUTTON_TEST_WHEEL_UP 41
 // #define BUTTON_TEST_WHEEL_DOWN 42
 // #define BUTTON_TEST_WHEEL_LEFT 48
 // #define BUTTON_TEST_WHEEL_RIGHT 2
-// #else
+#else
 #define BUTTON_TEST_WHEEL_UP NOT_DEFINED_KEY
 #define BUTTON_TEST_WHEEL_DOWN NOT_DEFINED_KEY
-#define BUTTON_TEST_WHEEL_LEFT NOT_DEFINED_KEY
-#define BUTTON_TEST_WHEEL_RIGHT NOT_DEFINED_KEY
-// #endif
+#define BUTTON_TEST_WHEEL_LEFT (NOT_DEFINED_KEY + 11)
+#define BUTTON_TEST_WHEEL_RIGHT (NOT_DEFINED_KEY + 12)
+#endif
 
 #define BUTTON_TEST_WHEEL_LEFT_LIN (NOT_DEFINED_KEY + 1)
 #define BUTTON_TEST_WHEEL_RIGHT_LIN (NOT_DEFINED_KEY + 2)
@@ -76,7 +76,7 @@ void sendCarStatusData(void *args)
     speed = speed % 300;
     // carStatus.setSpeed(speed);                 // Set the speed in the car status
     carStatus.setEngineRPM(send_count * 10 % 14000); // Set the RPM in the car status
-    carStatus.setWheelRPM(send_count % 256); // Simulate wheel value change for demonstration
+    carStatus.setWheelRPM(send_count % 256);         // Simulate wheel value change for demonstration
     carStatus.setGear((send_count / 50) % 7);
     carStatus.setIgnition(1);
     carStatus.setVoltage(120);
@@ -113,12 +113,15 @@ void key_press_and_check_long_key(int pin)
         {
             int pin = (int)args;
             printf("key_press_and_check_long_key : %d\n", pin);
-            bike_key_map[pin]->press();
-            if (bike_key_map[pin]->check_long_key())
+            if (bike_key_map[pin])
             {
-                wwBluetooth.keyPress(bike_key_map[pin]->long_key);
-                vTaskDelay(10);
-                wwBluetooth.keyRelease(bike_key_map[pin]->long_key);
+                bike_key_map[pin]->press();
+                if (bike_key_map[pin]->check_long_key())
+                {
+                    wwBluetooth.keyPress(bike_key_map[pin]->long_key);
+                    vTaskDelay(10);
+                    wwBluetooth.keyRelease(bike_key_map[pin]->long_key);
+                }
             }
             vTaskDelete(NULL);
         },
@@ -131,6 +134,10 @@ void key_press_and_check_long_key(int pin)
 
 void key_release(int pin)
 {
+
+    if (!bike_key_map[pin])
+        return;
+
     uint8_t key = bike_key_map[pin]->release();
     if (key != 0)
     {
@@ -224,7 +231,7 @@ void setup()
     gLeds.addLED(STR_LED_ACTIVE, LED_ACTIVE, false, true);
     gLeds.addLED(STR_LED_COMM, LED_COMM, false, true);
     gLeds.addLED(STR_LED_GREEN, LED_GREEN, false, true);
-    
+
     gLeds.setLEDCalibrationValue(STR_LED_ACTIVE, 255, 250);
     gLeds.setLEDCalibrationValue(STR_LED_COMM, 255, 250);
     gLeds.setLEDCalibrationValue(STR_LED_GREEN, 255, 245);
@@ -289,13 +296,13 @@ void setup()
 
     bike_key_map[BUTTON_TEST_WHEEL_UP] = new __BIKE_KEY(BUTTON_TEST_WHEEL_UP, WW_KEY_UP_ARROW);
     bike_key_map[BUTTON_TEST_WHEEL_DOWN] = new __BIKE_KEY(BUTTON_TEST_WHEEL_DOWN, WW_KEY_DOWN_ARROW);
-    bike_key_map[BUTTON_TEST_WHEEL_LEFT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_LEFT, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
+    bike_key_map[BUTTON_TEST_WHEEL_LEFT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_LEFT, WW_KEY_LEFT_ARROW, WW_ANDROID_BACK);
     bike_key_map[BUTTON_TEST_WHEEL_RIGHT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_RIGHT, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
-    bike_key_map[BUTTON_TEST_WHEEL_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
+    bike_key_map[BUTTON_TEST_WHEEL_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_ANDROID_BACK);
     bike_key_map[BUTTON_TEST_WHEEL_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
     // bike_key_map[BUTTON_TEST_REPEATER_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
     // bike_key_map[BUTTON_TEST_REPEATER_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
-    bike_key_map[BUTTON_TEST_REPEATER_CENTER_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_NUM_5, WW_KEY_ESC);
+    bike_key_map[BUTTON_TEST_REPEATER_CENTER_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_NUM_5, WW_ANDROID_BACK);
 
 #ifndef ON_BIKE
     xTaskCreate(
@@ -332,6 +339,7 @@ void print_buffer(const uint8_t *buf, int size)
 
 void send_key_oneshot(uint8_t key)
 {
+    // printf("send_key_oneshot : %d\n", key);
     int key_code = key;
     xTaskCreate(
         [](void *args)
@@ -408,7 +416,8 @@ void loop()
             }
             is_comm_led_on = !is_comm_led_on;
 
-            print_buffer(buf, bytes_read);
+
+            // continue;
 
             // display.clear();
             // display.drawString(0, 0, StringFormat("%02x %02x %02x %02x %02x %02x %02x", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6]));
@@ -425,6 +434,9 @@ void loop()
             dataMutex.lock();
             if (id == 0x14)
             {
+                // printf("test1\n");
+                // print_buffer(buf, bytes_read);
+
                 carStatus.setAllButtonRelease();
                 uint8_t left_buttons1 = buf[2]; // 01=ESA, 02=ABS, 04=Hazard, 08=Cruise, 10=Left Signal, 20=Right Signal, 40=Cancel Signal, 80=Horn
                 uint8_t left_buttons2 = buf[3]; // 02=High Beam, 04=Cruise Reset, 08=Cruise Set, 10=Info, 20=Trip
@@ -435,17 +447,17 @@ void loop()
                 {
 
                     carStatus.setButtons(carStatus.BUTTON_WHEEL_LEFT);
-                    key_press_and_check_long_key(BUTTON_TEST_WHEEL_LEFT);
+                    key_press_and_check_long_key(BUTTON_TEST_WHEEL_LEFT_LIN);
                 }
                 else if (wonder_wheel_in_out == 0xFE) // wonder wheel in
                 {
                     carStatus.setButtons(carStatus.BUTTON_WHEEL_RIGHT);
-                    key_press_and_check_long_key(BUTTON_TEST_WHEEL_RIGHT);
-                }
+                    key_press_and_check_long_key(BUTTON_TEST_WHEEL_RIGHT_LIN);
+                }       
                 else
                 {
-                    key_release(BUTTON_TEST_WHEEL_LEFT);
-                    key_release(BUTTON_TEST_WHEEL_RIGHT);
+                    key_release(BUTTON_TEST_WHEEL_LEFT_LIN);
+                    key_release(BUTTON_TEST_WHEEL_RIGHT_LIN);
                 }
 
                 if (left_buttons1 == 0x10)
@@ -482,10 +494,10 @@ void loop()
             }
             else if (id == 0x20) // 0x20
             {
-                carStatus.setIgnition(buf[2] == 0x7F ? 1 : 0);          // 0x7F means ignition is ON
+                carStatus.setIgnition(buf[2] == 0x7F ? 1 : 0);                   // 0x7F means ignition is ON
                 unsigned short rear_wheel_rpm = ((buf[4] & 0x0F) << 8) | buf[3]; // Speed is in bytes 3 and 4
                 double d_wheel_rpm = (double)rear_wheel_rpm * 0.16;
-                d_wheel_rpm = d_wheel_rpm + 0.5;         // Round to nearest integer
+                d_wheel_rpm = d_wheel_rpm + 0.5;                        // Round to nearest integer
                 unsigned short wheel_rpm = (unsigned short)d_wheel_rpm; // Convert back to unsigned short
 
                 if (buf[2] == 0x3F)
@@ -512,30 +524,30 @@ void loop()
                 unsigned char gear = buf[2] & 0xF0;
                 switch (gear)
                 {
-                    case 0x10:
-                        carStatus.setGear(1); // 1단
-                        break;
-                    case 0x20:
-                        carStatus.setGear(0); // N단
-                        break;
-                    case 0x40:
-                        carStatus.setGear(2); // 2단
-                        break;
-                    case 0x70:
-                        carStatus.setGear(3); // 3단
-                        break;
-                    case 0x80:
-                        carStatus.setGear(4); // 4단
-                        break;
-                    case 0xB0:
-                        carStatus.setGear(5); // 5단
-                        break;
-                    case 0xD0:
-                        carStatus.setGear(6); // 6단
-                        break;
-                    default:
-                        carStatus.setGear(9); // F
-                        break;
+                case 0x10:
+                    carStatus.setGear(1); // 1단
+                    break;
+                case 0x20:
+                    carStatus.setGear(0); // N단
+                    break;
+                case 0x40:
+                    carStatus.setGear(2); // 2단
+                    break;
+                case 0x70:
+                    carStatus.setGear(3); // 3단
+                    break;
+                case 0x80:
+                    carStatus.setGear(4); // 4단
+                    break;
+                case 0xB0:
+                    carStatus.setGear(5); // 5단
+                    break;
+                case 0xD0:
+                    carStatus.setGear(6); // 6단
+                    break;
+                default:
+                    carStatus.setGear(9); // F
+                    break;
                 }
 
                 unsigned short engine_rpm = ((buf[2] & 0x0F) << 8) | buf[1]; // RPM is in bytes 2 and 3

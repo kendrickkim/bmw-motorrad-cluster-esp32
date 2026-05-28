@@ -24,6 +24,7 @@ const uint8_t WW_KEY_HOME = 0xD2;
 const uint8_t WW_KEY_END = 0xD5;
 const uint8_t WW_KEY_NUM_5 = 0xE5;
 const uint8_t WW_ANDROID_HOME = 0x00;
+const uint8_t WW_ANDROID_BACK = 0x04;
 
 typedef struct
 {

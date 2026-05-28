@@ -65,7 +65,7 @@ void WW_BLUETOOTH::CarStatusNotify(uint8_t *data, size_t size)
 
 void WW_BLUETOOTH::KeyboardInputNotify(uint8_t *data, size_t size)
 {
-    Serial.printf("KeyboardInputNotify: %d\n", pServer->getConnectedCount());
+    // Serial.printf("KeyboardInputNotify: %d\n", pServer->getConnectedCount());
     if (pServer->getConnectedCount() > 0 && pServerCallback.is_connected)
     {
         pServerCallback.input->setValue(data, size);
