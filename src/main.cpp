@@ -31,22 +31,22 @@
 SoftwareLin swLin(LIN_RX_PIN, LIN_TX_PIN);
 
 // Change the below values if desired
-#define ON_BIKE
+// #define ON_BIKE
 
 #define SW_LEFT_PIN 0
 #define SW_RIGHT_PIN 39
 
-// #ifndef ON_BIKE
-// #define BUTTON_TEST_WHEEL_UP 41
-// #define BUTTON_TEST_WHEEL_DOWN 42
-// #define BUTTON_TEST_WHEEL_LEFT 48
-// #define BUTTON_TEST_WHEEL_RIGHT 2
-// #else
+#ifndef ON_BIKE
+#define BUTTON_TEST_WHEEL_UP NOT_DEFINED_KEY
+#define BUTTON_TEST_WHEEL_DOWN NOT_DEFINED_KEY
+#define BUTTON_TEST_WHEEL_LEFT 0
+#define BUTTON_TEST_WHEEL_RIGHT NOT_DEFINED_KEY
+#else
 #define BUTTON_TEST_WHEEL_UP NOT_DEFINED_KEY
 #define BUTTON_TEST_WHEEL_DOWN NOT_DEFINED_KEY
 #define BUTTON_TEST_WHEEL_LEFT NOT_DEFINED_KEY
 #define BUTTON_TEST_WHEEL_RIGHT NOT_DEFINED_KEY
-// #endif
+#endif
 
 #define BUTTON_TEST_WHEEL_LEFT_LIN (NOT_DEFINED_KEY + 1)
 #define BUTTON_TEST_WHEEL_RIGHT_LIN (NOT_DEFINED_KEY + 2)
@@ -64,7 +64,7 @@ MSYS_BUTTON gButtons;
 int send_count = 0;
 int wheel_value = 0;
 
-void send_key_oneshot(uint8_t key);
+void send_key_oneshot(uint16_t key);
 
 void sendCarStatusData(void *args)
 {
@@ -76,7 +76,7 @@ void sendCarStatusData(void *args)
     speed = speed % 300;
     // carStatus.setSpeed(speed);                 // Set the speed in the car status
     carStatus.setEngineRPM(send_count * 10 % 14000); // Set the RPM in the car status
-    carStatus.setWheelRPM(send_count % 256); // Simulate wheel value change for demonstration
+    carStatus.setWheelRPM(send_count % 256);         // Simulate wheel value change for demonstration
     carStatus.setGear((send_count / 50) % 7);
     carStatus.setIgnition(1);
     carStatus.setVoltage(120);
@@ -106,8 +106,31 @@ void sendCarStatusData(void *args)
     vTaskDelete(NULL); // Delete the task if it is not needed
 }
 
+void check_and_do_meta_key_press(uint16_t key_value)
+{
+    if (key_value > 0xff) // 0x80
+    {
+        wwBluetooth.keyPress((key_value >> 8) + 0x80);
+        vTaskDelay(10);
+    }
+    wwBluetooth.keyPress(key_value & 0xff);
+
+    vTaskDelay(10);
+}
+
+void check_and_do_meta_key_release(uint16_t key_value)
+{
+    wwBluetooth.keyRelease(key_value & 0xff);
+    if (key_value > 0xff) // 0x7f
+    {
+        vTaskDelay(10);
+        wwBluetooth.keyRelease((key_value >> 8) + 0x80);
+    }
+}
+
 void key_press_and_check_long_key(int pin)
 {
+    // printf("key_press_and_check_long_key : %d\n", pin);
     xTaskCreate(
         [](void *args)
         {
@@ -116,9 +139,9 @@ void key_press_and_check_long_key(int pin)
             bike_key_map[pin]->press();
             if (bike_key_map[pin]->check_long_key())
             {
-                wwBluetooth.keyPress(bike_key_map[pin]->long_key);
-                vTaskDelay(10);
-                wwBluetooth.keyRelease(bike_key_map[pin]->long_key);
+                uint16_t long_key = bike_key_map[pin]->long_key;
+                check_and_do_meta_key_press(long_key);
+                check_and_do_meta_key_release(long_key);
             }
             vTaskDelete(NULL);
         },
@@ -131,12 +154,24 @@ void key_press_and_check_long_key(int pin)
 
 void key_release(int pin)
 {
-    uint8_t key = bike_key_map[pin]->release();
+    // printf("key_release: %d\n", pin);
+    uint16_t key = bike_key_map[pin]->release();
     if (key != 0)
     {
+        if (key > 0xff)
+        {
+            wwBluetooth.keyPress(key >> 8 + 0x7f);
+        }
+        vTaskDelay(10);
         wwBluetooth.keyPress(key);
         vTaskDelay(10);
         wwBluetooth.keyRelease(key);
+        vTaskDelay(10);
+
+        if (key > 0xff)
+        {
+            wwBluetooth.keyRelease(key >> 8 + 0x7f);
+        }
     }
 }
 
@@ -215,16 +250,16 @@ void setup()
     // pinMode(BUTTON_PIN, INPUT_PULLUP);
     // attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), button_interrupt, FALLING);
 
-    pinMode(SW_LEFT_PIN, INPUT_PULLUP);
-    pinMode(SW_RIGHT_PIN, INPUT_PULLUP);
+    // pinMode(SW_LEFT_PIN, INPUT_PULLUP);
+    // pinMode(SW_RIGHT_PIN, INPUT_PULLUP);
 
-    gMsysButton.addButton(SW_LEFT_PIN, buttonPressCallback, buttonReleaseCallback);
-    gMsysButton.addButton(SW_RIGHT_PIN, buttonPressCallback, buttonReleaseCallback);
+    // gMsysButton.addButton(SW_LEFT_PIN, buttonPressCallback, buttonReleaseCallback);
+    // gMsysButton.addButton(SW_RIGHT_PIN, buttonPressCallback, buttonReleaseCallback);
 
     gLeds.addLED(STR_LED_ACTIVE, LED_ACTIVE, false, true);
     gLeds.addLED(STR_LED_COMM, LED_COMM, false, true);
     gLeds.addLED(STR_LED_GREEN, LED_GREEN, false, true);
-    
+
     gLeds.setLEDCalibrationValue(STR_LED_ACTIVE, 255, 250);
     gLeds.setLEDCalibrationValue(STR_LED_COMM, 255, 250);
     gLeds.setLEDCalibrationValue(STR_LED_GREEN, 255, 245);
@@ -287,15 +322,15 @@ void setup()
     swLin.begin(9600);
 #endif
 
-    bike_key_map[BUTTON_TEST_WHEEL_UP] = new __BIKE_KEY(BUTTON_TEST_WHEEL_UP, WW_KEY_UP_ARROW);
-    bike_key_map[BUTTON_TEST_WHEEL_DOWN] = new __BIKE_KEY(BUTTON_TEST_WHEEL_DOWN, WW_KEY_DOWN_ARROW);
-    bike_key_map[BUTTON_TEST_WHEEL_LEFT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_LEFT, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
-    bike_key_map[BUTTON_TEST_WHEEL_RIGHT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_RIGHT, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
-    bike_key_map[BUTTON_TEST_WHEEL_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
-    bike_key_map[BUTTON_TEST_WHEEL_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
+    // bike_key_map[BUTTON_TEST_WHEEL_UP] = new __BIKE_KEY(BUTTON_TEST_WHEEL_UP, WW_KEY_UP_ARROW);
+    // bike_key_map[BUTTON_TEST_WHEEL_DOWN] = new __BIKE_KEY(BUTTON_TEST_WHEEL_DOWN, WW_KEY_DOWN_ARROW);
+    bike_key_map[BUTTON_TEST_WHEEL_LEFT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_LEFT, WW_KEY_LEFT_ARROW, WW_ANDROID_BACK);
+    // bike_key_map[BUTTON_TEST_WHEEL_RIGHT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_RIGHT, WW_KEY_RIGHT_ARROW, WW_KEY_RETURN);
+    // bike_key_map[BUTTON_TEST_WHEEL_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
+    // bike_key_map[BUTTON_TEST_WHEEL_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
     // bike_key_map[BUTTON_TEST_REPEATER_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
     // bike_key_map[BUTTON_TEST_REPEATER_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
-    bike_key_map[BUTTON_TEST_REPEATER_CENTER_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_NUM_5, WW_KEY_ESC);
+    bike_key_map[BUTTON_TEST_REPEATER_CENTER_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_NUM_5, WW_KEY_NUM_5);
 
 #ifndef ON_BIKE
     xTaskCreate(
@@ -330,16 +365,24 @@ void print_buffer(const uint8_t *buf, int size)
     Serial.println();
 }
 
-void send_key_oneshot(uint8_t key)
+void send_key_oneshot(uint16_t key)
 {
     int key_code = key;
     xTaskCreate(
         [](void *args)
         {
             int key_code = (int)args;
+            if (key_code > 0xff)
+            {
+                wwBluetooth.keyPress(key_code >> 8 + 0x7f);
+            }
             wwBluetooth.keyPress(key_code);
             vTaskDelay(10);
             wwBluetooth.keyRelease(key_code);
+            if (key_code > 0xff)
+            {
+                wwBluetooth.keyRelease(key_code >> 8 + 0x7f);
+            }
             vTaskDelete(NULL);
         },
         "task_send_key_oneshot",
@@ -482,10 +525,10 @@ void loop()
             }
             else if (id == 0x20) // 0x20
             {
-                carStatus.setIgnition(buf[2] == 0x7F ? 1 : 0);          // 0x7F means ignition is ON
+                carStatus.setIgnition(buf[2] == 0x7F ? 1 : 0);                   // 0x7F means ignition is ON
                 unsigned short rear_wheel_rpm = ((buf[4] & 0x0F) << 8) | buf[3]; // Speed is in bytes 3 and 4
                 double d_wheel_rpm = (double)rear_wheel_rpm * 0.16;
-                d_wheel_rpm = d_wheel_rpm + 0.5;         // Round to nearest integer
+                d_wheel_rpm = d_wheel_rpm + 0.5;                        // Round to nearest integer
                 unsigned short wheel_rpm = (unsigned short)d_wheel_rpm; // Convert back to unsigned short
 
                 if (buf[2] == 0x3F)
@@ -512,30 +555,30 @@ void loop()
                 unsigned char gear = buf[2] & 0xF0;
                 switch (gear)
                 {
-                    case 0x10:
-                        carStatus.setGear(1); // 1단
-                        break;
-                    case 0x20:
-                        carStatus.setGear(0); // N단
-                        break;
-                    case 0x40:
-                        carStatus.setGear(2); // 2단
-                        break;
-                    case 0x70:
-                        carStatus.setGear(3); // 3단
-                        break;
-                    case 0x80:
-                        carStatus.setGear(4); // 4단
-                        break;
-                    case 0xB0:
-                        carStatus.setGear(5); // 5단
-                        break;
-                    case 0xD0:
-                        carStatus.setGear(6); // 6단
-                        break;
-                    default:
-                        carStatus.setGear(9); // F
-                        break;
+                case 0x10:
+                    carStatus.setGear(1); // 1단
+                    break;
+                case 0x20:
+                    carStatus.setGear(0); // N단
+                    break;
+                case 0x40:
+                    carStatus.setGear(2); // 2단
+                    break;
+                case 0x70:
+                    carStatus.setGear(3); // 3단
+                    break;
+                case 0x80:
+                    carStatus.setGear(4); // 4단
+                    break;
+                case 0xB0:
+                    carStatus.setGear(5); // 5단
+                    break;
+                case 0xD0:
+                    carStatus.setGear(6); // 6단
+                    break;
+                default:
+                    carStatus.setGear(9); // F
+                    break;
                 }
 
                 unsigned short engine_rpm = ((buf[2] & 0x0F) << 8) | buf[1]; // RPM is in bytes 2 and 3

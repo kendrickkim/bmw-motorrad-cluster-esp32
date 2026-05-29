@@ -31,10 +31,10 @@ public:
     long ms_press;
     long ms_release;
     BIKE_KEY_STATUS status;
-    uint8_t short_key;
-    uint8_t long_key;
+    uint16_t short_key;
+    uint16_t long_key;
 
-    __BIKE_KEY(int pin, uint8_t short_key, uint8_t long_key)
+    __BIKE_KEY(int pin, uint16_t short_key, uint16_t long_key)
     {
         this->pin = pin;
         this->ms_press = 0;
@@ -44,7 +44,7 @@ public:
         this->long_key = long_key;
     }
 
-    __BIKE_KEY(int pin, uint8_t short_key)
+    __BIKE_KEY(int pin, uint16_t short_key)
     {
         this->pin = pin;
         this->ms_press = 0;
@@ -76,7 +76,7 @@ public:
         return false;
     }
 
-    uint8_t release()
+    uint16_t release()
     {
         if (this->status == BK_STATUS_PRESSED || this->status == BK_STATUS_LONG_RELEASED)
         {
