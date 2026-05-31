@@ -64,7 +64,7 @@ MSYS_BUTTON gButtons;
 int send_count = 0;
 int wheel_value = 0;
 
-void send_key_oneshot(uint8_t key);
+void send_key_oneshot(uint16_t key);
 
 void sendCarStatusData(void *args)
 {
@@ -106,8 +106,31 @@ void sendCarStatusData(void *args)
     vTaskDelete(NULL); // Delete the task if it is not needed
 }
 
+void check_and_do_meta_key_press(uint16_t key_value)
+{
+    if (key_value > 0xff) // 0x80
+    {
+        wwBluetooth.keyPress((key_value >> 8) + 0x80);
+        vTaskDelay(10);
+    }
+    wwBluetooth.keyPress(key_value & 0xff);
+
+    vTaskDelay(10);
+}
+
+void check_and_do_meta_key_release(uint16_t key_value)
+{
+    wwBluetooth.keyRelease(key_value & 0xff);
+    if (key_value > 0xff) // 0x7f
+    {
+        vTaskDelay(10);
+        wwBluetooth.keyRelease((key_value >> 8) + 0x80);
+    }
+}
+
 void key_press_and_check_long_key(int pin)
 {
+    // printf("key_press_and_check_long_key : %d\n", pin);
     xTaskCreate(
         [](void *args)
         {
@@ -118,9 +141,9 @@ void key_press_and_check_long_key(int pin)
                 bike_key_map[pin]->press();
                 if (bike_key_map[pin]->check_long_key())
                 {
-                    wwBluetooth.keyPress(bike_key_map[pin]->long_key);
-                    vTaskDelay(10);
-                    wwBluetooth.keyRelease(bike_key_map[pin]->long_key);
+                    uint16_t long_key = bike_key_map[pin]->long_key;
+                    check_and_do_meta_key_press(long_key);
+                    check_and_do_meta_key_release(long_key);
                 }
             }
             vTaskDelete(NULL);
@@ -134,16 +157,15 @@ void key_press_and_check_long_key(int pin)
 
 void key_release(int pin)
 {
-
-    if (!bike_key_map[pin])
-        return;
-
-    uint8_t key = bike_key_map[pin]->release();
-    if (key != 0)
+    // printf("key_release: %d\n", pin);
+    if (bike_key_map[pin])
     {
-        wwBluetooth.keyPress(key);
-        vTaskDelay(10);
-        wwBluetooth.keyRelease(key);
+        uint16_t key = bike_key_map[pin]->release();
+        if (key != 0)
+        {
+            check_and_do_meta_key_press(key);
+            check_and_do_meta_key_release(key);
+        }
     }
 }
 
@@ -297,12 +319,12 @@ void setup()
     bike_key_map[BUTTON_TEST_WHEEL_UP] = new __BIKE_KEY(BUTTON_TEST_WHEEL_UP, WW_KEY_UP_ARROW);
     bike_key_map[BUTTON_TEST_WHEEL_DOWN] = new __BIKE_KEY(BUTTON_TEST_WHEEL_DOWN, WW_KEY_DOWN_ARROW);
     bike_key_map[BUTTON_TEST_WHEEL_LEFT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_LEFT, WW_KEY_LEFT_ARROW, WW_ANDROID_BACK);
-    bike_key_map[BUTTON_TEST_WHEEL_RIGHT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_RIGHT, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
+    bike_key_map[BUTTON_TEST_WHEEL_RIGHT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_RIGHT, WW_KEY_RIGHT_ARROW, WW_KEY_RETURN);
     bike_key_map[BUTTON_TEST_WHEEL_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_ANDROID_BACK);
-    bike_key_map[BUTTON_TEST_WHEEL_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
-    // bike_key_map[BUTTON_TEST_REPEATER_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
-    // bike_key_map[BUTTON_TEST_REPEATER_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
-    bike_key_map[BUTTON_TEST_REPEATER_CENTER_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_NUM_5, WW_ANDROID_BACK);
+    bike_key_map[BUTTON_TEST_WHEEL_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_RETURN);
+    // bike_key_map[BUTTON_TEST_REPEATER_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_ANDROID_BACK);
+    // bike_key_map[BUTTON_TEST_REPEATER_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_RETURN);
+    // bike_key_map[BUTTON_TEST_REPEATER_CENTER_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RETURN, WW_ANDROID_BACK);
 
 #ifndef ON_BIKE
     xTaskCreate(
@@ -345,9 +367,8 @@ void send_key_oneshot(uint8_t key)
         [](void *args)
         {
             int key_code = (int)args;
-            wwBluetooth.keyPress(key_code);
-            vTaskDelay(10);
-            wwBluetooth.keyRelease(key_code);
+            check_and_do_meta_key_press(key_code);
+            check_and_do_meta_key_release(key_code);
             vTaskDelete(NULL);
         },
         "task_send_key_oneshot",
@@ -416,7 +437,6 @@ void loop()
             }
             is_comm_led_on = !is_comm_led_on;
 
-
             // continue;
 
             // display.clear();
@@ -430,6 +450,7 @@ void loop()
             }
 
             uint8_t id = buf[0];
+            print_buffer(buf, bytes_read);
 
             dataMutex.lock();
             if (id == 0x14)
@@ -453,7 +474,7 @@ void loop()
                 {
                     carStatus.setButtons(carStatus.BUTTON_WHEEL_RIGHT);
                     key_press_and_check_long_key(BUTTON_TEST_WHEEL_RIGHT_LIN);
-                }       
+                }
                 else
                 {
                     key_release(BUTTON_TEST_WHEEL_LEFT_LIN);

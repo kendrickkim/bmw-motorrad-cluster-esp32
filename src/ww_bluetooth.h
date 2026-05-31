@@ -24,7 +24,21 @@ const uint8_t WW_KEY_HOME = 0xD2;
 const uint8_t WW_KEY_END = 0xD5;
 const uint8_t WW_KEY_NUM_5 = 0xE5;
 const uint8_t WW_ANDROID_HOME = 0x00;
-const uint8_t WW_ANDROID_BACK = 0x04;
+
+/* meta key flags */
+/*
+    - 0x01: Left ctrl
+    - 0x02: left shift
+    - 0x04: left alt
+    - 0x08: left gui / meta
+    - 0x10: right ctrl
+    - 0x20: right shift
+    - 0x40: right alt
+    - 0x80: right gui / meta
+*/
+
+const uint8_t WW_KEY_META_FLAG = 0x07;
+const uint16_t WW_ANDROID_BACK = (WW_KEY_META_FLAG << 8 | WW_KEY_LEFT_ARROW);
 
 typedef struct
 {
