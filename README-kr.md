@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-BMW Motorrad **LIN** 신호를 스니핑해 BLE로 차량 상태를 알리고, Wonder Wheel / 핸들 조작을 **BLE HID 키보드**로 보내는 ESP32 / ESP32-S3 펌웨어입니다.
+BMW Motorrad **LIN** 프레임을 해석하지 않고 BLE로 그대로 보내고, Message ID `0x14`만 **BLE HID 키보드**로 만드는 ESP32 / ESP32-S3 펌웨어입니다.
 
 | 저장소 | 역할 |
 |---|---|
@@ -13,9 +13,9 @@ BMW Motorrad **LIN** 신호를 스니핑해 BLE로 차량 상태를 알리고, W
 ## 기능
 
 - 소프트웨어 LIN 수신 (`SoftwareLin`), 기본 **9600 baud**
-- Message ID 파싱: `0x14`(컨트롤/Wonder Wheel), `0x20`(이그니션/휠 RPM), `0xE2`(RPM/기어), 전압 관련 프레임 등
+- LIN 프레임을 Message ID + Data-0..Data-5 (7바이트)로 전달. `0x14`는 같은 프레임으로 HID 키도 생성
 - BLE 장치명 `BMW-WWC-<MAC 접미사>`
-- 차량 상태 notify 페이로드 (`CAR_DATA_LENGTH` = 15바이트)
+- notify characteristic `0x2A01`. 같은 ID의 동일 프레임은 다시 보내지 않음
 - Wonder Wheel / 버튼용 BLE HID 키보드 (숏·롱 프레스)
 - 선택적 SSD1306 OLED
 - 바이크 없이 벤치 테스트: `ON_BIKE` 해제 후 GPIO 테스트 버튼
@@ -27,7 +27,7 @@ Bike LIN ──► LIN 트랜시버 (예: TJA1021) ──► ESP32
                                                   │
                           ┌───────────────────────┼───────────────────────┐
                           ▼                       ▼                       ▼
-                   프레임 파싱              car_status 패킹          HID 키 리포트
+                   7바이트 원본 프레임       ID 0x14 → 키            HID 키 리포트
                           │                       │                       │
                           └─────────── BLE (Device Info notify + HID) ───┘
                                               │
@@ -54,7 +54,7 @@ Bike LIN ──► LIN 트랜시버 (예: TJA1021) ──► ESP32
 | LIN commander | 8 |
 | OLED SDA / SCL | 7 / 15 |
 | 상태 LED | 35, 36, 37 |
-| Boot / ESC 버튼 | 0 |
+| Boot / LIN capture | 0 |
 
 핀맵은 `boards/` 커스텀 보드 정의를 따릅니다. PCB에 맞게 수정하세요.
 
@@ -67,19 +67,25 @@ Bike LIN ──► LIN 트랜시버 (예: TJA1021) ──► ESP32
 | 텔레메트리 | Device Information `0x180A`, characteristic `0x2A01` (read + notify) |
 | 본딩 | `ESP_LE_AUTH_BOND` |
 
-### 차량 상태 페이로드 (`buildData`)
+### LIN 프레임 notify (실차)
+
+바이트 순서는 `bmw-motorrad-cluster-linbus`의 `lin_analysis`와 같습니다. 체크섬은 포함하지 않습니다. `0x14`를 포함한 모든 ID가 같은 형식입니다.
 
 | Offset | 필드 |
 |:------:|------|
-| 0 | 버튼 (하위 바이트) |
-| 1 | 버튼 (상위 바이트) |
-| 2 | Wonder Wheel 값 |
-| 3 | 기어 |
-| 4 | 전압 (raw) |
-| 5–6 | 휠 RPM (LE uint16) |
-| 7–8 | 엔진 RPM (LE uint16) |
-| 9 | 이그니션 (`0` / `1`) |
-| 10–14 | 예약 / 0 |
+| 0 | Message ID |
+| 1 | Data-0 |
+| 2 | Data-1 |
+| 3 | Data-2 |
+| 4 | Data-3 |
+| 5 | Data-4 |
+| 6 | Data-5 |
+
+`0x14` 키보드는 Data-1(왼쪽 핸들), Data-3(Wonder Wheel in/out), Data-5(회전값)를 사용합니다. 그 외 ID는 이 펌웨어에서 해석하지 않습니다.
+
+벤치 모드(`ON_BIKE` 해제)에는 LIN 프레임이 없으므로, 기존 `car_status` 15바이트(`CAR_DATA_LENGTH`)를 그대로 notify 합니다.
+
+GPIO0을 누르면 펌웨어에 포함된 `lin_capture.txt`를 한 줄씩 10ms 간격으로 같은 7바이트 notify로 보냅니다. 재생 중 다시 누르면 첫 줄부터 다시 시작합니다. 이 재생은 `0x14` 키보드를 만들지 않습니다.
 
 롱프레스 기준: **1000 ms**.
 

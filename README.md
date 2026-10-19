@@ -2,7 +2,7 @@
 
 [한국어](README-kr.md)
 
-ESP32 / ESP32-S3 firmware that sniffs BMW Motorrad **LIN** traffic, packs vehicle state for BLE notify, and exposes Wonder Wheel / handle controls as a **BLE HID keyboard**.
+ESP32 / ESP32-S3 firmware that sniffs BMW Motorrad **LIN** traffic, forwards each frame unchanged over BLE, and turns Message ID `0x14` into a **BLE HID keyboard**.
 
 | Repository | Role |
 |---|---|
@@ -13,9 +13,9 @@ ESP32 / ESP32-S3 firmware that sniffs BMW Motorrad **LIN** traffic, packs vehicl
 ## Features
 
 - Software LIN reader (`SoftwareLin`) at **9600 baud** (optional autobaud path in code)
-- Decode Message IDs such as `0x14` (controls / Wonder Wheel), `0x20` (ignition / wheel RPM), `0xE2` (RPM / gear), voltage-related frames
+- Forward every LIN frame as Message ID + Data-0..Data-5 (7 bytes). `0x14` is also decoded locally into HID keys
 - BLE peripheral named `BMW-WWC-<MAC suffix>`
-- Car-status notify payload (`CAR_DATA_LENGTH` = 15 bytes)
+- Notify characteristic `0x2A01`. Identical repeats of the same ID are not sent again
 - BLE HID keyboard for wheel / button shortcuts (short + long press)
 - Optional SSD1306 OLED status (`BMW Motorrad` splash)
 - Bench mode without a bike: undefine `ON_BIKE` and use GPIO test buttons
@@ -27,7 +27,7 @@ Bike LIN ──► LIN transceiver (e.g. TJA1021) ──► ESP32
                                                   │
                           ┌───────────────────────┼───────────────────────┐
                           ▼                       ▼                       ▼
-                   parse frames            car_status pack         HID key reports
+                   raw 7-byte frame        ID 0x14 → keys          HID key reports
                           │                       │                       │
                           └─────────── BLE (Device Info notify + HID) ───┘
                                               │
@@ -54,7 +54,7 @@ Bike LIN ──► LIN transceiver (e.g. TJA1021) ──► ESP32
 | LIN commander | 8 |
 | OLED SDA / SCL | 7 / 15 |
 | Status LEDs | 35, 36, 37 |
-| Boot / ESC button | 0 |
+| Boot / LIN capture | 0 |
 
 Pin maps follow the custom board JSON under `boards/`. Adjust for your PCB.
 
@@ -67,21 +67,25 @@ Pin maps follow the custom board JSON under `boards/`. Adjust for your PCB.
 | Telemetry | Device Information service `0x180A`, characteristic `0x2A01` (read + notify) |
 | Bonding | `ESP_LE_AUTH_BOND` |
 
-### Car-status payload (`car_status.cpp` → `buildData`)
+### LIN frame notify (on the bike)
+
+Byte indexes match `bmw-motorrad-cluster-linbus` `lin_analysis`. The checksum is not included. The same layout is sent for every ID, including `0x14`.
 
 | Offset | Field |
 |:------:|-------|
-| 0 | Buttons (low byte) |
-| 1 | Buttons (high byte) |
-| 2 | Wonder Wheel value |
-| 3 | Gear |
-| 4 | Voltage (raw; app displays ×0.1 style scaling) |
-| 5–6 | Wheel RPM (LE uint16) |
-| 7–8 | Engine RPM (LE uint16) |
-| 9 | Ignition (`0` / `1`) |
-| 10–14 | Reserved / zero |
+| 0 | Message ID |
+| 1 | Data-0 |
+| 2 | Data-1 |
+| 3 | Data-2 |
+| 4 | Data-3 |
+| 5 | Data-4 |
+| 6 | Data-5 |
 
-Button bits (see `__CAR_STATUS` enums): LEFT, RIGHT, CENTER, WHEEL_LEFT, WHEEL_RIGHT, WHEEL_UP, WHEEL_DOWN.
+`0x14` keyboard uses Data-1 (left handle), Data-3 (Wonder Wheel in/out), and Data-5 (rotation). Other IDs are not decoded in this firmware.
+
+Bench mode (`ON_BIKE` undefined) has no LIN frames, so it still notifies the packed `car_status` blob (`CAR_DATA_LENGTH` = 15).
+
+Pressing GPIO0 replays the embedded `lin_capture.txt` as the same 7-byte notify, one line every 10 ms. Pressing again during playback restarts from the first line. This replay does not emit the `0x14` keyboard.
 
 HID mapping examples (LIN path): Wonder Wheel In/Out → arrows / ESC / numpad; wheel rotation → up/down arrows. Long-press threshold: **1000 ms** (`BK_LONG_KEY_PRESS_TIME`).
 
