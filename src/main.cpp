@@ -35,6 +35,8 @@ SoftwareLin swLin(LIN_RX_PIN, LIN_TX_PIN);
 
 #define SW_LEFT_PIN 0
 #define SW_RIGHT_PIN 39
+#define BUTTON_PIN SW_LEFT_PIN
+#define CAPTURE_LED_PIN 1
 
 #ifndef ON_BIKE
 // #define BUTTON_TEST_WHEEL_UP 41
@@ -64,7 +66,25 @@ MSYS_BUTTON gButtons;
 int send_count = 0;
 int wheel_value = 0;
 
+// index 0 = Message ID, index 1..6 = Data-0 .. Data-5. Checksum is not forwarded.
+#define LIN_FRAME_LEN 7
+
+static uint8_t last_lin_frame[256][LIN_FRAME_LEN];
+static uint8_t lin_frame_seen[256];
+
 void send_key_oneshot(uint16_t key);
+
+void notify_lin_frame(const uint8_t *frame)
+{
+    uint8_t id = frame[0];
+    if (lin_frame_seen[id] && memcmp(last_lin_frame[id], frame, LIN_FRAME_LEN) == 0)
+    {
+        return;
+    }
+    memcpy(last_lin_frame[id], frame, LIN_FRAME_LEN);
+    lin_frame_seen[id] = 1;
+    wwBluetooth.CarStatusNotify(last_lin_frame[id], LIN_FRAME_LEN);
+}
 
 void sendCarStatusData(void *args)
 {
@@ -195,9 +215,131 @@ void task_monitor_bike_key(void *args)
 }
 #endif
 
-void button_interrupt()
+extern const uint8_t lin_capture_txt_start[] asm("_binary_lin_capture_txt_start");
+extern const uint8_t lin_capture_txt_end[] asm("_binary_lin_capture_txt_end");
+
+#define LIN_CAPTURE_HOLD_MS 5000
+
+static int hex_nibble(char c)
 {
-    send_key_oneshot(WW_KEY_ESC);
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    return -1;
+}
+
+static bool next_lin_capture_frame(const uint8_t *&cursor, const uint8_t *end, uint8_t out[LIN_FRAME_LEN])
+{
+    while (cursor < end)
+    {
+        while (cursor < end && (*cursor == ' ' || *cursor == '\t' || *cursor == '\r' || *cursor == '\n'))
+            cursor++;
+        if (cursor >= end)
+            return false;
+
+        const uint8_t *line_end = cursor;
+        while (line_end < end && *line_end != '\n' && *line_end != '\r')
+            line_end++;
+
+        const uint8_t *token = cursor;
+        cursor = line_end;
+        int count = 0;
+        while (token < line_end && count < LIN_FRAME_LEN)
+        {
+            while (token < line_end && (*token == ' ' || *token == '\t'))
+                token++;
+            if (token >= line_end)
+                break;
+            if ((token + 1) < line_end && token[0] == '0' && (token[1] == 'x' || token[1] == 'X'))
+                token += 2;
+
+            int value = 0;
+            int digits = 0;
+            int nibble;
+            while (token < line_end && (nibble = hex_nibble((char)*token)) >= 0)
+            {
+                value = (value << 4) | nibble;
+                digits++;
+                token++;
+            }
+            if (digits == 0)
+                break;
+            out[count++] = (uint8_t)value;
+        }
+        if (count == LIN_FRAME_LEN)
+            return true;
+    }
+    return false;
+}
+
+static void wait_lin_capture_button_release()
+{
+    while (digitalRead(BUTTON_PIN) == LOW)
+        vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(50));
+}
+
+static void replay_lin_capture()
+{
+    wait_lin_capture_button_release();
+    const uint8_t *cursor = lin_capture_txt_start;
+    const uint8_t *end = lin_capture_txt_end;
+    int line = 0;
+    Serial.println("LIN capture replay start");
+    while (cursor < end)
+    {
+        if (digitalRead(BUTTON_PIN) == LOW)
+        {
+            digitalWrite(CAPTURE_LED_PIN, LOW);
+            Serial.println("LIN capture replay stopped");
+            return;
+        }
+        uint8_t frame[LIN_FRAME_LEN];
+        if (!next_lin_capture_frame(cursor, end, frame))
+            break;
+        line++;
+        Serial.printf(
+            "LIN sim %d: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n",
+            line,
+            frame[0], frame[1], frame[2], frame[3], frame[4], frame[5], frame[6]);
+        wwBluetooth.CarStatusNotify(frame, LIN_FRAME_LEN);
+        digitalWrite(CAPTURE_LED_PIN, HIGH);
+        vTaskDelay(pdMS_TO_TICKS(5));
+        digitalWrite(CAPTURE_LED_PIN, LOW);
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    digitalWrite(CAPTURE_LED_PIN, LOW);
+    Serial.printf("LIN capture replay done (%d)\n", line);
+}
+
+static void task_lin_capture(void *)
+{
+    bool holding = false;
+    uint32_t press_start = 0;
+    while (1)
+    {
+        if (digitalRead(BUTTON_PIN) == LOW)
+        {
+            if (!holding)
+            {
+                holding = true;
+                press_start = millis();
+            }
+            else if (millis() - press_start >= LIN_CAPTURE_HOLD_MS)
+            {
+                replay_lin_capture();
+                holding = false;
+            }
+        }
+        else
+        {
+            holding = false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
 }
 
 void drawString(int x, int y, String str, OLEDDISPLAY_COLOR color = WHITE)
@@ -241,8 +383,9 @@ void setup()
 
     Serial.begin(115200);
 
-    // pinMode(BUTTON_PIN, INPUT_PULLUP);
-    // attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), button_interrupt, FALLING);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    pinMode(CAPTURE_LED_PIN, OUTPUT);
+    digitalWrite(CAPTURE_LED_PIN, LOW);
 
     pinMode(SW_LEFT_PIN, INPUT_PULLUP);
     pinMode(SW_RIGHT_PIN, INPUT_PULLUP);
@@ -310,6 +453,14 @@ void setup()
 #endif
     wwBluetooth.On();
 
+    xTaskCreate(
+        task_lin_capture,
+        "task_lin_capture",
+        8192,
+        NULL,
+        1,
+        NULL);
+
 #ifdef LIN_AUTOBAUD
     swLin.begin(20000);
 #else
@@ -359,7 +510,7 @@ void print_buffer(const uint8_t *buf, int size)
     Serial.println();
 }
 
-void send_key_oneshot(uint8_t key)
+void send_key_oneshot(uint16_t key)
 {
     // printf("send_key_oneshot : %d\n", key);
     int key_code = key;
@@ -402,9 +553,7 @@ void loop()
 {
     while (1)
     {
-        const int frame_data_bytes = 5;
-
-        uint8_t buf[2 + frame_data_bytes]; // 2 bytes for PID and CHECKSUM. !!! The SYNC is consumed by swLin.setAutoBaud()
+        uint8_t buf[LIN_FRAME_LEN]; // Message ID + Data-0..Data-5. SYNC is consumed by swLin.setAutoBaud().
 
         if (swLin.checkBreak())
         {
@@ -455,9 +604,7 @@ void loop()
             dataMutex.lock();
             if (id == 0x14)
             {
-                // printf("test1\n");
-                // print_buffer(buf, bytes_read);
-
+                // Data-1 / Data-3 / Data-5. See linbus lin_analysis ID 0x14.
                 carStatus.setAllButtonRelease();
                 uint8_t left_buttons1 = buf[2]; // 01=ESA, 02=ABS, 04=Hazard, 08=Cruise, 10=Left Signal, 20=Right Signal, 40=Cancel Signal, 80=Horn
                 uint8_t left_buttons2 = buf[3]; // 02=High Beam, 04=Cruise Reset, 08=Cruise Set, 10=Info, 20=Trip
@@ -578,13 +725,7 @@ void loop()
 
             dataMutex.unlock();
 
-            xTaskCreate(
-                sendCarStatusData,   // Task function
-                "sendCarStatusData", // Name of the task
-                8192 * 2,            // Stack size in bytes
-                NULL,                // Task parameters
-                1,                   // Priority
-                NULL);               // Task handle
+            notify_lin_frame(buf);
         }
     }
 }
