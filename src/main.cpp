@@ -660,68 +660,68 @@ void loop()
                     send_key_oneshot(WW_KEY_DOWN_ARROW);
                 }
             }
-            else if (id == 0x20) // 0x20
-            {
-                carStatus.setIgnition(buf[2] == 0x7F ? 1 : 0);                   // 0x7F means ignition is ON
-                unsigned short rear_wheel_rpm = ((buf[4] & 0x0F) << 8) | buf[3]; // Speed is in bytes 3 and 4
-                double d_wheel_rpm = (double)rear_wheel_rpm * 0.16;
-                d_wheel_rpm = d_wheel_rpm + 0.5;                        // Round to nearest integer
-                unsigned short wheel_rpm = (unsigned short)d_wheel_rpm; // Convert back to unsigned short
-
-                if (buf[2] == 0x3F)
-                {
-                    wheel_rpm = 0; // If speed is 0x3F, treat it as 0 (error case)
-                }
-                carStatus.setWheelRPM(wheel_rpm); // Set the speed in km/h
-            }
-            // else if (id == 0x2b)
+            // else if (id == 0x20) // 0x20
             // {
-            //     // print_buffer(buf, bytes_to_read);
-            // }
-            // else if (id == 0x2e)
-            // {
-            //     // print_buffer(buf, bytes_to_read);
-            // }
-            // 0x2e , 0x2b 별거 없음
-            else if (id == 0xe9)
-            {
-                carStatus.setVoltage(buf[4]); // Set the voltage * 10
-            }
-            else if (id == 0xe2)
-            {
-                unsigned char gear = buf[2] & 0xF0;
-                switch (gear)
-                {
-                case 0x10:
-                    carStatus.setGear(1); // 1단
-                    break;
-                case 0x20:
-                    carStatus.setGear(0); // N단
-                    break;
-                case 0x40:
-                    carStatus.setGear(2); // 2단
-                    break;
-                case 0x70:
-                    carStatus.setGear(3); // 3단
-                    break;
-                case 0x80:
-                    carStatus.setGear(4); // 4단
-                    break;
-                case 0xB0:
-                    carStatus.setGear(5); // 5단
-                    break;
-                case 0xD0:
-                    carStatus.setGear(6); // 6단
-                    break;
-                default:
-                    carStatus.setGear(9); // F
-                    break;
-                }
+            //     carStatus.setIgnition(buf[2] == 0x7F ? 1 : 0);                   // 0x7F means ignition is ON
+            //     unsigned short rear_wheel_rpm = ((buf[4] & 0x0F) << 8) | buf[3]; // Speed is in bytes 3 and 4
+            //     double d_wheel_rpm = (double)rear_wheel_rpm * 0.16;
+            //     d_wheel_rpm = d_wheel_rpm + 0.5;                        // Round to nearest integer
+            //     unsigned short wheel_rpm = (unsigned short)d_wheel_rpm; // Convert back to unsigned short
 
-                unsigned short engine_rpm = ((buf[2] & 0x0F) << 8) | buf[1]; // RPM is in bytes 2 and 3
-                engine_rpm = engine_rpm * 5;
-                carStatus.setEngineRPM(engine_rpm); // Set the RPM
-            }
+            //     if (buf[2] == 0x3F)
+            //     {
+            //         wheel_rpm = 0; // If speed is 0x3F, treat it as 0 (error case)
+            //     }
+            //     carStatus.setWheelRPM(wheel_rpm); // Set the speed in km/h
+            // }
+            // // else if (id == 0x2b)
+            // // {
+            // //     // print_buffer(buf, bytes_to_read);
+            // // }
+            // // else if (id == 0x2e)
+            // // {
+            // //     // print_buffer(buf, bytes_to_read);
+            // // }
+            // // 0x2e , 0x2b 별거 없음
+            // else if (id == 0xe9)
+            // {
+            //     carStatus.setVoltage(buf[4]); // Set the voltage * 10
+            // }
+            // else if (id == 0xe2)
+            // {
+            //     unsigned char gear = buf[2] & 0xF0;
+            //     switch (gear)
+            //     {
+            //     case 0x10:
+            //         carStatus.setGear(1); // 1단
+            //         break;
+            //     case 0x20:
+            //         carStatus.setGear(0); // N단
+            //         break;
+            //     case 0x40:
+            //         carStatus.setGear(2); // 2단
+            //         break;
+            //     case 0x70:
+            //         carStatus.setGear(3); // 3단
+            //         break;
+            //     case 0x80:
+            //         carStatus.setGear(4); // 4단
+            //         break;
+            //     case 0xB0:
+            //         carStatus.setGear(5); // 5단
+            //         break;
+            //     case 0xD0:
+            //         carStatus.setGear(6); // 6단
+            //         break;
+            //     default:
+            //         carStatus.setGear(9); // F
+            //         break;
+            //     }
+
+            //     unsigned short engine_rpm = ((buf[2] & 0x0F) << 8) | buf[1]; // RPM is in bytes 2 and 3
+            //     engine_rpm = engine_rpm * 5;
+            //     carStatus.setEngineRPM(engine_rpm); // Set the RPM
+            // }
 
             dataMutex.unlock();
 
