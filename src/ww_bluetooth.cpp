@@ -1,27 +1,76 @@
 #include "ww_bluetooth.h"
 #include "car_status.h"
 
+#if defined(CONFIG_NIMBLE_ENABLED)
+#include <host/ble_gap.h>
+#include <host/ble_gatt.h>
+#include <host/ble_hs.h>
+#endif
+
 WW_BLUETOOTH wwBluetooth;
+
+// NimBLE only delivers BLECharacteristic::notify() to CCCD-subscribed peers.
+// Older Bluedroid code forced CCCD via BLE2902; that descriptor is unavailable
+// on NimBLE, so send notifications directly to connected peers.
+static void forceNotifyCharacteristic(BLECharacteristic *chr, BLEServer *server)
+{
+    if (chr == NULL || server == NULL)
+    {
+        return;
+    }
+
+#if defined(CONFIG_NIMBLE_ENABLED)
+    String value = chr->getValue();
+    if (value.length() == 0)
+    {
+        return;
+    }
+
+    auto peers = server->getPeerDevices(false);
+    for (auto const &peer : peers)
+    {
+        uint16_t conn = peer.first;
+        if (server->getPeerMTU(conn) == 0)
+        {
+            continue;
+        }
+
+        os_mbuf *om = ble_hs_mbuf_from_flat((uint8_t *)value.c_str(), value.length());
+        if (om == NULL)
+        {
+            continue;
+        }
+
+        int rc = ble_gatts_notify_custom(conn, chr->getHandle(), om);
+        if (rc != 0)
+        {
+            os_mbuf_free_chain(om);
+        }
+    }
+#else
+    chr->notify();
+#endif
+}
 
 void WW_BLUETOOTH_SERVER_CALLBACK::onConnect(BLEServer *pServer)
 {
     D_INFO("BLE central connected\n");
-    // pServer->getAdvertising()->stop();
-    // LedControl.leds[LEDCONTROL::BLUE].status = LED_STATUS::LED_ON;
-
-    BLE2902 *cccDesc = (BLE2902 *)input->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
-    cccDesc->setNotifications(true);
+    // Keep PROPERTY_NOTIFY enabled (NimBLE BLE2902 CCCD object is not usable).
+    if (input != NULL)
+    {
+        input->setNotifyProperty(true);
+    }
+    if (wwBluetooth.pCharacteristic_rwni != NULL)
+    {
+        wwBluetooth.pCharacteristic_rwni->setNotifyProperty(true);
+    }
 
     is_connected = true;
 }
 
 void WW_BLUETOOTH_SERVER_CALLBACK::onDisconnect(BLEServer *pServer)
 {
-    // LedControl.leds[LEDCONTROL::BLUE].status = LED_STATUS::LED_BLINK;
     D_INFO("BLE central disconnected\n");
-    // pServer->getAdvertising()->start();
-    BLE2902 *cccDesc = (BLE2902 *)input->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
-    cccDesc->setNotifications(false);
     pServer->getAdvertising()->start();
 
     is_connected = false;
@@ -46,30 +95,28 @@ void WW_BLUETOOTH_CHAR_CALLBACK::onRead(BLECharacteristic *pCharacteristic)
 
 void WW_BLUETOOTH::CarStatusNotify(String value)
 {
-    if (pServer->getConnectedCount() > 0 && pServerCallback.is_connected)
+    if (pServer->getConnectedCount() > 0 && pServerCallback.is_connected && pCharacteristic_rwni != NULL)
     {
-        // String value = StringFormat("12 34 56 78 9A BC DE F0");
         pCharacteristic_rwni->setValue(value.c_str());
-        pCharacteristic_rwni->notify();
+        forceNotifyCharacteristic(pCharacteristic_rwni, pServer);
     }
 }
 
 void WW_BLUETOOTH::CarStatusNotify(uint8_t *data, size_t size)
 {
-    if (pServer->getConnectedCount() > 0 && pServerCallback.is_connected)
+    if (pServer->getConnectedCount() > 0 && pServerCallback.is_connected && pCharacteristic_rwni != NULL)
     {
         pCharacteristic_rwni->setValue(data, size);
-        pCharacteristic_rwni->notify();
+        forceNotifyCharacteristic(pCharacteristic_rwni, pServer);
     }
 }
 
 void WW_BLUETOOTH::KeyboardInputNotify(uint8_t *data, size_t size)
 {
-    // Serial.printf("KeyboardInputNotify: %d\n", pServer->getConnectedCount());
-    if (pServer->getConnectedCount() > 0 && pServerCallback.is_connected)
+    if (pServer->getConnectedCount() > 0 && pServerCallback.is_connected && pServerCallback.input != NULL)
     {
         pServerCallback.input->setValue(data, size);
-        pServerCallback.input->notify();
+        forceNotifyCharacteristic(pServerCallback.input, pServer);
     }
 }
 
