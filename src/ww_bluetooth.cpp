@@ -6,22 +6,31 @@ WW_BLUETOOTH wwBluetooth;
 void WW_BLUETOOTH_SERVER_CALLBACK::onConnect(BLEServer *pServer)
 {
     D_INFO("BLE central connected\n");
-    // pServer->getAdvertising()->stop();
-    // LedControl.leds[LEDCONTROL::BLUE].status = LED_STATUS::LED_ON;
-
-    BLE2902 *cccDesc = (BLE2902 *)input->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
-    cccDesc->setNotifications(true);
+    // NimBLE auto-manages CCCD (0x2902); getDescriptorByUUID may return NULL.
+    // Never dereference without a null check — that caused LoadProhibited reboot loops.
+    if (input != NULL)
+    {
+        BLEDescriptor *cccDesc = input->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
+        if (cccDesc != NULL)
+        {
+            ((BLE2902 *)cccDesc)->setNotifications(true);
+        }
+    }
 
     is_connected = true;
 }
 
 void WW_BLUETOOTH_SERVER_CALLBACK::onDisconnect(BLEServer *pServer)
 {
-    // LedControl.leds[LEDCONTROL::BLUE].status = LED_STATUS::LED_BLINK;
     D_INFO("BLE central disconnected\n");
-    // pServer->getAdvertising()->start();
-    BLE2902 *cccDesc = (BLE2902 *)input->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
-    cccDesc->setNotifications(false);
+    if (input != NULL)
+    {
+        BLEDescriptor *cccDesc = input->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
+        if (cccDesc != NULL)
+        {
+            ((BLE2902 *)cccDesc)->setNotifications(false);
+        }
+    }
     pServer->getAdvertising()->start();
 
     is_connected = false;
@@ -65,7 +74,7 @@ void WW_BLUETOOTH::CarStatusNotify(uint8_t *data, size_t size)
 
 void WW_BLUETOOTH::KeyboardInputNotify(uint8_t *data, size_t size)
 {
-    Serial.printf("KeyboardInputNotify: %d\n", pServer->getConnectedCount());
+    // Serial.printf("KeyboardInputNotify: %d\n", pServer->getConnectedCount());
     if (pServer->getConnectedCount() > 0 && pServerCallback.is_connected)
     {
         pServerCallback.input->setValue(data, size);

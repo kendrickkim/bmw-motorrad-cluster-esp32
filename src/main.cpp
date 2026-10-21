@@ -109,17 +109,29 @@ void sendCarStatusData(void *args)
 
 void key_press_and_check_long_key(int pin)
 {
+    auto it = bike_key_map.find(pin);
+    if (it == bike_key_map.end() || it->second == nullptr)
+    {
+        return;
+    }
+
     xTaskCreate(
         [](void *args)
         {
             int pin = (int)args;
-            printf("key_press_and_check_long_key : %d\n", pin);
-            bike_key_map[pin]->press();
-            if (bike_key_map[pin]->check_long_key())
+            auto it = bike_key_map.find(pin);
+            if (it == bike_key_map.end() || it->second == nullptr)
             {
-                wwBluetooth.keyPress(bike_key_map[pin]->long_key);
+                vTaskDelete(NULL);
+                return;
+            }
+            printf("key_press_and_check_long_key : %d\n", pin);
+            it->second->press();
+            if (it->second->check_long_key())
+            {
+                wwBluetooth.keyPress(it->second->long_key);
                 vTaskDelay(10);
-                wwBluetooth.keyRelease(bike_key_map[pin]->long_key);
+                wwBluetooth.keyRelease(it->second->long_key);
             }
             vTaskDelete(NULL);
         },
@@ -132,7 +144,13 @@ void key_press_and_check_long_key(int pin)
 
 void key_release(int pin)
 {
-    uint8_t key = bike_key_map[pin]->release();
+    auto it = bike_key_map.find(pin);
+    if (it == bike_key_map.end() || it->second == nullptr)
+    {
+        return;
+    }
+
+    uint8_t key = it->second->release();
     if (key != 0)
     {
         wwBluetooth.keyPress(key);
@@ -363,21 +381,23 @@ void setup()
         NULL,
         1,
         NULL);
-
+#define LIN_AUTOBAUD 1
 #ifdef LIN_AUTOBAUD
-    swLin.begin(LIN_BAUD_MAX);
+    swLin.begin(20000);
 #else
     swLin.begin(9600);
 #endif
 
+#ifndef ON_BIKE
     bike_key_map[BUTTON_TEST_WHEEL_UP] = new __BIKE_KEY(BUTTON_TEST_WHEEL_UP, WW_KEY_UP_ARROW);
     bike_key_map[BUTTON_TEST_WHEEL_DOWN] = new __BIKE_KEY(BUTTON_TEST_WHEEL_DOWN, WW_KEY_DOWN_ARROW);
     bike_key_map[BUTTON_TEST_WHEEL_LEFT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_LEFT, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
     bike_key_map[BUTTON_TEST_WHEEL_RIGHT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_RIGHT, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
+#endif
     bike_key_map[BUTTON_TEST_WHEEL_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
     bike_key_map[BUTTON_TEST_WHEEL_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
-    // bike_key_map[BUTTON_TEST_REPEATER_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
-    // bike_key_map[BUTTON_TEST_REPEATER_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
+    bike_key_map[BUTTON_TEST_REPEATER_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_KEY_ESC);
+    bike_key_map[BUTTON_TEST_REPEATER_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_NUM_5);
     bike_key_map[BUTTON_TEST_REPEATER_CENTER_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_ESC, WW_KEY_ESC);
 
 #ifndef ON_BIKE
@@ -520,17 +540,17 @@ void loop()
                 {
 
                     carStatus.setButtons(carStatus.BUTTON_WHEEL_LEFT);
-                    key_press_and_check_long_key(BUTTON_TEST_WHEEL_LEFT);
+                    key_press_and_check_long_key(BUTTON_TEST_WHEEL_LEFT_LIN);
                 }
                 else if (wonder_wheel_in_out == 0xFE) // wonder wheel in
                 {
                     carStatus.setButtons(carStatus.BUTTON_WHEEL_RIGHT);
-                    key_press_and_check_long_key(BUTTON_TEST_WHEEL_RIGHT);
+                    key_press_and_check_long_key(BUTTON_TEST_WHEEL_RIGHT_LIN);
                 }
                 else
                 {
-                    key_release(BUTTON_TEST_WHEEL_LEFT);
-                    key_release(BUTTON_TEST_WHEEL_RIGHT);
+                    key_release(BUTTON_TEST_WHEEL_LEFT_LIN);
+                    key_release(BUTTON_TEST_WHEEL_RIGHT_LIN);
                 }
 
                 if (left_buttons1 == 0x10)
