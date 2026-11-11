@@ -39,6 +39,7 @@ const uint8_t WW_ANDROID_HOME = 0x00;
 
 const uint8_t WW_KEY_META_FLAG = 0x07;
 const uint16_t WW_ANDROID_BACK = (WW_KEY_META_FLAG << 8 | WW_KEY_LEFT_ARROW);
+const uint16_t WW_KEY_NOTDEFINED = 0x0000;
 
 typedef struct
 {
