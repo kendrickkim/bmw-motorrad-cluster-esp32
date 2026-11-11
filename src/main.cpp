@@ -150,42 +150,35 @@ void check_and_do_meta_key_release(uint16_t key_value)
 
 void key_press_and_check_long_key(int pin)
 {
-    // printf("key_press_and_check_long_key : %d\n", pin);
-    xTaskCreate(
-        [](void *args)
-        {
-            int pin = (int)args;
-            printf("key_press_and_check_long_key : %d\n", pin);
-            if (bike_key_map[pin])
-            {
-                bike_key_map[pin]->press();
-                if (bike_key_map[pin]->check_long_key())
-                {
-                    uint16_t long_key = bike_key_map[pin]->long_key;
-                    check_and_do_meta_key_press(long_key);
-                    check_and_do_meta_key_release(long_key);
-                }
-            }
-            vTaskDelete(NULL);
-        },
-        "task_key_press_and_check_long_key",
-        8192 * 2,
-        (void *)pin,
-        1,
-        NULL);
+    auto it = bike_key_map.find(pin);
+    if (it == bike_key_map.end() || it->second == NULL)
+    {
+        return;
+    }
+
+    __BIKE_KEY *bike_key = it->second;
+    bike_key->press();
+    if (bike_key->check_long_key() && bike_key->long_key != 0)
+    {
+        uint16_t long_key = bike_key->long_key;
+        Serial.printf("HID long key 0x%04X (pin %d)\n", long_key, pin);
+        send_key_oneshot(long_key);
+    }
 }
 
 void key_release(int pin)
 {
-    // printf("key_release: %d\n", pin);
-    if (bike_key_map[pin])
+    auto it = bike_key_map.find(pin);
+    if (it == bike_key_map.end() || it->second == NULL)
     {
-        uint16_t key = bike_key_map[pin]->release();
-        if (key != 0)
-        {
-            check_and_do_meta_key_press(key);
-            check_and_do_meta_key_release(key);
-        }
+        return;
+    }
+
+    uint16_t key = it->second->release();
+    if (key != 0)
+    {
+        Serial.printf("HID short key 0x%04X (pin %d)\n", key, pin);
+        send_key_oneshot(key);
     }
 }
 
@@ -473,9 +466,9 @@ void setup()
     bike_key_map[BUTTON_TEST_WHEEL_RIGHT] = new __BIKE_KEY(BUTTON_TEST_WHEEL_RIGHT, WW_KEY_RIGHT_ARROW, WW_KEY_RETURN);
     bike_key_map[BUTTON_TEST_WHEEL_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_ANDROID_BACK);
     bike_key_map[BUTTON_TEST_WHEEL_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_RETURN);
-    // bike_key_map[BUTTON_TEST_REPEATER_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_ANDROID_BACK);
-    // bike_key_map[BUTTON_TEST_REPEATER_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_RETURN);
-    // bike_key_map[BUTTON_TEST_REPEATER_CENTER_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RETURN, WW_ANDROID_BACK);
+    bike_key_map[BUTTON_TEST_REPEATER_LEFT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_LEFT_ARROW, WW_ANDROID_BACK);
+    bike_key_map[BUTTON_TEST_REPEATER_RIGHT_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_RIGHT_ARROW, WW_KEY_RETURN);
+    // bike_key_map[BUTTON_TEST_REPEATER_CENTER_LIN] = new __BIKE_KEY(NOT_DEFINED_KEY, WW_KEY_NOTDEFINED, WW_KEY_RETURN);
 
 #ifndef ON_BIKE
     xTaskCreate(
@@ -512,9 +505,12 @@ void print_buffer(const uint8_t *buf, int size)
 
 void send_key_oneshot(uint16_t key)
 {
-    // printf("send_key_oneshot : %d\n", key);
+    if (key == 0)
+    {
+        return;
+    }
     int key_code = key;
-    xTaskCreate(
+    BaseType_t ok = xTaskCreate(
         [](void *args)
         {
             int key_code = (int)args;
@@ -523,10 +519,16 @@ void send_key_oneshot(uint16_t key)
             vTaskDelete(NULL);
         },
         "task_send_key_oneshot",
-        8192 * 2,
+        4096,
         (void *)key_code,
         1,
         NULL);
+    if (ok != pdPASS)
+    {
+        // Fallback if task create fails under load
+        check_and_do_meta_key_press(key);
+        check_and_do_meta_key_release(key);
+    }
 }
 #ifndef ON_BIKE
 void loop()

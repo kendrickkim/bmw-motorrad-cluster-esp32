@@ -5,6 +5,8 @@
 #include <host/ble_gap.h>
 #include <host/ble_gatt.h>
 #include <host/ble_hs.h>
+#else
+#include <BLE2902.h>
 #endif
 
 WW_BLUETOOTH wwBluetooth;
@@ -12,6 +14,7 @@ WW_BLUETOOTH wwBluetooth;
 // NimBLE only delivers BLECharacteristic::notify() to CCCD-subscribed peers.
 // Older Bluedroid code forced CCCD via BLE2902; that descriptor is unavailable
 // on NimBLE, so send notifications directly to connected peers.
+// Use getData()/getLength() — HID KeyReport often starts with 0x00 modifiers.
 static void forceNotifyCharacteristic(BLECharacteristic *chr, BLEServer *server)
 {
     if (chr == NULL || server == NULL)
@@ -20,8 +23,9 @@ static void forceNotifyCharacteristic(BLECharacteristic *chr, BLEServer *server)
     }
 
 #if defined(CONFIG_NIMBLE_ENABLED)
-    String value = chr->getValue();
-    if (value.length() == 0)
+    uint8_t *data = chr->getData();
+    size_t length = chr->getLength();
+    if (data == NULL || length == 0)
     {
         return;
     }
@@ -35,7 +39,7 @@ static void forceNotifyCharacteristic(BLECharacteristic *chr, BLEServer *server)
             continue;
         }
 
-        os_mbuf *om = ble_hs_mbuf_from_flat((uint8_t *)value.c_str(), value.length());
+        os_mbuf *om = ble_hs_mbuf_from_flat(data, length);
         if (om == NULL)
         {
             continue;
@@ -52,18 +56,36 @@ static void forceNotifyCharacteristic(BLECharacteristic *chr, BLEServer *server)
 #endif
 }
 
+static void enableNotifications(BLECharacteristic *chr)
+{
+    if (chr == NULL)
+    {
+        return;
+    }
+
+#if defined(CONFIG_NIMBLE_ENABLED)
+    // NimBLE BLE2902 CCCD object is not usable; keep NOTIFY property on.
+    chr->setNotifyProperty(true);
+#else
+    BLE2902 *cccDesc = (BLE2902 *)chr->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
+    if (cccDesc != NULL)
+    {
+        cccDesc->setNotifications(true);
+    }
+    else
+    {
+        chr->setNotifyProperty(true);
+    }
+#endif
+}
+
 void WW_BLUETOOTH_SERVER_CALLBACK::onConnect(BLEServer *pServer)
 {
     D_INFO("BLE central connected\n");
-    // Keep PROPERTY_NOTIFY enabled (NimBLE BLE2902 CCCD object is not usable).
-    if (input != NULL)
-    {
-        input->setNotifyProperty(true);
-    }
-    if (wwBluetooth.pCharacteristic_rwni != NULL)
-    {
-        wwBluetooth.pCharacteristic_rwni->setNotifyProperty(true);
-    }
+    // Bluedroid: force CCCD so HID/CarStatus notify works after bond.
+    // NimBLE: BLE2902 path reboots — use setNotifyProperty + forceNotify instead.
+    enableNotifications(input);
+    enableNotifications(wwBluetooth.pCharacteristic_rwni);
 
     is_connected = true;
 }
@@ -71,6 +93,16 @@ void WW_BLUETOOTH_SERVER_CALLBACK::onConnect(BLEServer *pServer)
 void WW_BLUETOOTH_SERVER_CALLBACK::onDisconnect(BLEServer *pServer)
 {
     D_INFO("BLE central disconnected\n");
+#if !defined(CONFIG_NIMBLE_ENABLED)
+    if (input != NULL)
+    {
+        BLE2902 *cccDesc = (BLE2902 *)input->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
+        if (cccDesc != NULL)
+        {
+            cccDesc->setNotifications(false);
+        }
+    }
+#endif
     pServer->getAdvertising()->start();
 
     is_connected = false;
